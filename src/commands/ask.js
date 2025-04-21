@@ -1,46 +1,47 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { Client, Collection, GatewayIntentBits } from "discord.js";
-import dotenv from 'dotenv';
-dotenv.config();
 
-const genAI = new GoogleGenerativeAI(process.env["GEMINI_API_KEY"]);
-// 使用するモデルを取得（必要なら非同期処理の場合は await する）
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+export const data = {
+  name: 'ask',
+  description: 'Geminiに質問するコマンド',
+};
 
-const client = new Client({
-  intents: ["Guilds", "GuildMembers", "GuildMessages", "MessageContent"]
-});
-
-// （コマンドハンドラなど、他の初期化処理が続く ...）
-
-client.on("messageCreate", async (message) => {
-  if (!message.content.startsWith("!ask") || message.author.bot) return;
-
-  const prompt = message.content.slice(5).trim();
-  if (!prompt) {
-    await message.reply("質問内容を入力してください。");
-    return;
+export async function execute(message, args) {
+  // 環境変数からAPIキーを取得
+  const apiKey = process.env["GEMINI_API_KEY"];
+  
+  // APIキーがない場合はエラーメッセージを返す
+  if (!apiKey) {
+    return message.reply("GEMINI_API_KEYが設定されていません。BOT管理者に連絡してください。");
   }
-
+  
+  // 引数がない場合は使い方を表示
+  if (args.length === 0) {
+    return message.reply("質問内容を入力してください。例: `!ask 今日の天気はどうですか？`");
+  }
+  
+  const prompt = args.join(" ");
+  
   try {
-    // Gemini API にプロンプトを投げる
+    // Gemini APIの初期化
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    
+    // ユーザーに待機メッセージを送信
+    await message.channel.send("Geminiに質問中...");
+    
+    // Gemini APIにプロンプトを投げる
     const result = await model.generateContent(prompt);
     const response = await result.response;
     
-    // response.text() が Promise を返す場合もあるので await の可能性を考慮
+    // レスポンステキストを取得
     const text = typeof response.text === "function" 
                    ? await response.text() 
                    : response.text;
-
+    
+    // 結果を送信
     await message.reply(text);
   } catch (error) {
-    console.error(error);
+    console.error("Gemini API error:", error);
     await message.reply(`API リクエスト中にエラーが発生しました。\n${error.message}`);
   }
-});
-
-client.once("ready", () => {
-  console.log(`Logged in as ${client.user.tag}!`);
-});
-
-client.login(process.env.DISCORD_BOT_TOKEN);
+}
